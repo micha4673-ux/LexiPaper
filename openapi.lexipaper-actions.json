@@ -1,0 +1,134 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LexiPaper Actions",
+    "version": "0.2.0",
+    "description": "Save academic vocabulary cards from ChatGPT into LexiPaper."
+  },
+  "servers": [
+    {
+      "url": "https://YOUR-VERCEL-DOMAIN.vercel.app"
+    }
+  ],
+  "paths": {
+    "/api/actions/save-word": {
+      "post": {
+        "operationId": "saveLexiPaperWord",
+        "summary": "Save a vocabulary card",
+        "description": "Save an English word with a Korean meaning, paper sentence, and bibliographic metadata.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LexiPaperEntryInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved vocabulary card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "LexiPaperEntryInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["word", "meaning", "sentence"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Optional stable id. Omit when creating a new card."
+          },
+          "word": {
+            "type": "string",
+            "description": "The English vocabulary item to save."
+          },
+          "partOfSpeech": {
+            "type": "string",
+            "description": "Part of speech such as noun, verb, adjective, adverb, or phrase."
+          },
+          "meaning": {
+            "type": "string",
+            "description": "Korean meaning or definition."
+          },
+          "sentence": {
+            "type": "string",
+            "description": "The source sentence from the paper."
+          },
+          "paperTitle": {
+            "type": "string",
+            "description": "Title of the paper."
+          },
+          "page": {
+            "type": "string",
+            "description": "Page or page range, for example p. 12 or pp. 44-58."
+          },
+          "source": {
+            "type": "string",
+            "description": "DOI URL, DOI, or source URL."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string",
+            "description": "Optional user-facing study note."
+          },
+          "importance": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 3
+          },
+          "status": {
+            "type": "string",
+            "enum": ["new", "review", "mastered"],
+            "default": "new"
+          },
+          "starred": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "SaveResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "entry": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

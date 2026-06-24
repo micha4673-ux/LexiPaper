@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LexiPaper</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">L</div>
+          <div>
+            <p class="eyebrow">LexiPaper</p>
+            <h1>논문 문장으로 쌓는 영단어장</h1>
+          </div>
+        </div>
+        <div class="toolbar" aria-label="단어장 도구">
+          <button class="icon-button" id="exportBtn" type="button" aria-label="단어장 내보내기" title="단어장 내보내기">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+          </button>
+          <label class="icon-button file-button" aria-label="단어장 가져오기" title="단어장 가져오기">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 21V9m0 0 4 4m-4-4-4 4M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2" />
+            </svg>
+            <input id="importInput" type="file" accept="application/json" />
+          </label>
+          <button class="icon-button danger" id="resetBtn" type="button" aria-label="단어장 비우기" title="단어장 비우기">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="snapshot" aria-label="단어장 요약">
+        <div class="snapshot-copy">
+          <div>
+            <p class="section-kicker">오늘의 단어장</p>
+            <p class="snapshot-title" id="snapshotTitle">0개 저장됨</p>
+          </div>
+          <div class="stats">
+            <span><strong id="statReview">0</strong> 복습</span>
+            <span><strong id="statStarred">0</strong> 중요</span>
+            <span><strong id="statPapers">0</strong> 논문</span>
+          </div>
+        </div>
+        <img src="./assets/study-banner.png" alt="" />
+      </section>
+
+      <section class="sync-strip" aria-label="서버 동기화">
+        <label>
+          <span>서버 토큰</span>
+          <input id="serverTokenInput" type="password" placeholder="배포 후 토큰" />
+        </label>
+        <div class="sync-actions">
+          <button class="secondary-button" id="saveServerTokenBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+              <path d="M17 21v-8H7v8M7 3v5h8" />
+            </svg>
+            연결
+          </button>
+          <button class="ghost-button" id="pullServerBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16" />
+            </svg>
+            불러오기
+          </button>
+          <button class="ghost-button" id="pushLocalBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 21V9m0 0 4 4m-4-4-4 4M4 5h16" />
+            </svg>
+            올리기
+          </button>
+        </div>
+        <p class="sync-status" id="syncStatus" aria-live="polite">로컬 저장</p>
+      </section>
+
+      <main class="workspace">
+        <section class="panel form-panel" aria-labelledby="formTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Save</p>
+              <h2 id="formTitle">새 단어</h2>
+            </div>
+            <button class="ghost-button" id="clearFormBtn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" />
+              </svg>
+              비우기
+            </button>
+          </div>
+
+          <form id="entryForm" autocomplete="off">
+            <div class="field-grid two">
+              <label>
+                <span>단어</span>
+                <input id="wordInput" name="word" type="text" placeholder="e.g. robust" required />
+              </label>
+              <label>
+                <span>품사</span>
+                <select id="partInput" name="partOfSpeech">
+                  <option value="">선택 안 함</option>
+                  <option>noun</option>
+                  <option>verb</option>
+                  <option>adjective</option>
+                  <option>adverb</option>
+                  <option>phrase</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              <span>네이버 사전 뜻</span>
+              <textarea id="meaningInput" name="meaning" rows="4" placeholder="뜻을 붙여넣기"></textarea>
+            </label>
+
+            <label>
+              <span>논문 예문</span>
+              <textarea id="sentenceInput" name="sentence" rows="5" placeholder="논문 속 문장"></textarea>
+            </label>
+
+            <label class="zotero-paste">
+              <span>Zotero 붙여넣기</span>
+              <textarea id="zoteroPasteInput" rows="3" placeholder="BibTeX, RIS, 참고문헌"></textarea>
+            </label>
+            <p class="paste-status" id="zoteroStatus" aria-live="polite"></p>
+
+            <div class="field-grid two">
+              <label>
+                <span>논문 제목</span>
+                <input id="paperInput" name="paperTitle" type="text" placeholder="Paper title" />
+              </label>
+              <label>
+                <span>페이지</span>
+                <input id="pageInput" name="page" type="text" placeholder="p. 12" />
+              </label>
+            </div>
+
+            <label>
+              <span>DOI 또는 링크</span>
+              <input id="sourceInput" name="source" type="text" placeholder="10.xxxx/... 또는 https://..." />
+            </label>
+
+            <div class="field-grid two">
+              <label>
+                <span>태그</span>
+                <input id="tagsInput" name="tags" type="text" placeholder="method, statistics" />
+              </label>
+              <label>
+                <span>중요도</span>
+                <input id="importanceInput" name="importance" type="range" min="1" max="5" value="3" />
+              </label>
+            </div>
+
+            <label>
+              <span>메모</span>
+              <textarea id="noteInput" name="note" rows="3" placeholder="내 해석, 헷갈리는 점"></textarea>
+            </label>
+
+            <div class="form-actions">
+              <a id="naverLink" class="secondary-button" href="https://en.dict.naver.com/" target="_blank" rel="noreferrer">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 17 17 7M9 7h8v8" />
+                </svg>
+                네이버 사전
+              </a>
+              <button class="primary-button" type="submit">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                저장
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel list-panel" aria-labelledby="listTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Library</p>
+              <h2 id="listTitle">내 단어</h2>
+            </div>
+            <div class="count-pill" id="resultCount">0</div>
+          </div>
+
+          <div class="search-row">
+            <label class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
+              </svg>
+              <input id="searchInput" type="search" placeholder="단어, 뜻, 논문 검색" />
+            </label>
+          </div>
+
+          <div class="filters" role="tablist" aria-label="단어 필터">
+            <button class="filter active" type="button" data-filter="all">전체</button>
+            <button class="filter" type="button" data-filter="review">복습</button>
+            <button class="filter" type="button" data-filter="starred">중요</button>
+            <button class="filter" type="button" data-filter="mastered">완료</button>
+          </div>
+
+          <div class="sort-row">
+            <label>
+              <span>정렬</span>
+              <select id="sortInput">
+                <option value="newest">최근 저장</option>
+                <option value="word">단어순</option>
+                <option value="importance">중요도</option>
+                <option value="paper">논문 제목</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="word-list" id="wordList" aria-live="polite"></div>
+        </section>
+
+        <aside class="panel detail-panel" aria-labelledby="detailTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Review</p>
+              <h2 id="detailTitle">복습 카드</h2>
+            </div>
+            <button class="icon-button" id="starBtn" type="button" aria-label="중요 표시" title="중요 표시">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+              </svg>
+            </button>
+          </div>
+
+          <article class="review-card" id="detailCard"></article>
+
+          <div class="review-actions">
+            <button class="secondary-button" id="revealBtn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+              </svg>
+              뜻 보기
+            </button>
+            <button class="secondary-button" id="againBtn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 1 3 6.7M3 19v-7h7" />
+              </svg>
+              다시
+            </button>
+            <button class="primary-button" id="knownBtn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m20 6-11 11-5-5" />
+              </svg>
+              완료
+            </button>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <template id="emptyTemplate">
+      <div class="empty-state">
+        <p>저장된 단어가 없습니다.</p>
+      </div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
