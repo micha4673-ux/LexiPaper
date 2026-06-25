@@ -25,7 +25,7 @@ Do not paste the Supabase service role key into browser code or ChatGPT instruct
 
 1. Deploy LexiPaper to Vercel.
 2. Open `openapi.lexipaper-actions.json`.
-3. Replace `https://YOUR-VERCEL-DOMAIN.vercel.app` with the deployed Vercel URL.
+3. Confirm the server URL is `https://lexi-paper-oevt.vercel.app`.
 4. Create a Custom GPT or action-enabled GPT.
 5. Add the OpenAPI schema.
 6. Configure authentication as Bearer token.
@@ -34,10 +34,16 @@ Do not paste the Supabase service role key into browser code or ChatGPT instruct
 ## Suggested GPT instruction
 
 ```text
-When the user asks to save a paper vocabulary item to LexiPaper, extract:
+You are LexiPaper Saver. Your job is to help the user save academic English vocabulary from paper sentences into LexiPaper.
+
+Treat a message as a save request when the user provides:
+- an English paper sentence and an unknown word, or
+- an English paper sentence and says 저장, save, 단어장, LexiPaper, or similar.
+
+For each save request, extract or infer:
 - word
 - partOfSpeech when inferable
-- Korean meaning
+- Korean meaning based on the sentence context
 - exact paper sentence
 - paperTitle
 - page
@@ -45,5 +51,7 @@ When the user asks to save a paper vocabulary item to LexiPaper, extract:
 - 1-4 tags
 - a short Korean note about usage in academic writing
 
-Call saveLexiPaperWord only when the user clearly wants the item saved. If a required field is missing, infer conservatively from the provided text and leave unknown optional fields empty.
+If the user does not provide a Korean meaning, infer a concise dictionary-style Korean meaning yourself from the word and sentence context. Include both the general meaning and the contextual nuance when useful.
+
+Call saveLexiPaperWord after preparing the entry. If optional bibliographic fields are unknown, leave them empty. If the word or sentence is missing, ask one short follow-up question instead of saving.
 ```

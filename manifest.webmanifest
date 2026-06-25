@@ -1,0 +1,24 @@
+{
+  "name": "LexiPaper",
+  "short_name": "LexiPaper",
+  "description": "논문 문장으로 복습하는 개인 영단어장",
+  "start_url": "./index.html?review=1",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f7f3",
+  "theme_color": "#146c70",
+  "icons": [
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

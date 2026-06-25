@@ -49,6 +49,10 @@ const state = {
   reveal: false,
   editingId: null,
   serverToken: loadServerToken(),
+  studyOpen: false,
+  studyMode: "due",
+  studyIndex: 0,
+  studyReveal: false,
 };
 
 const form = document.querySelector("#entryForm");
@@ -88,6 +92,17 @@ const saveServerTokenBtn = document.querySelector("#saveServerTokenBtn");
 const pullServerBtn = document.querySelector("#pullServerBtn");
 const pushLocalBtn = document.querySelector("#pushLocalBtn");
 const syncStatus = document.querySelector("#syncStatus");
+const openStudyBtn = document.querySelector("#openStudyBtn");
+const openStudyHeroBtn = document.querySelector("#openStudyHeroBtn");
+const studyShell = document.querySelector("#studyShell");
+const closeStudyBtn = document.querySelector("#closeStudyBtn");
+const studyCard = document.querySelector("#studyCard");
+const studyCounter = document.querySelector("#studyCounter");
+const studyProgressBar = document.querySelector("#studyProgressBar");
+const studyRevealBtn = document.querySelector("#studyRevealBtn");
+const studyAgainBtn = document.querySelector("#studyAgainBtn");
+const studyKnownBtn = document.querySelector("#studyKnownBtn");
+const studyTabs = document.querySelectorAll(".study-tab");
 
 if (!state.selectedId && state.entries.length) {
   state.selectedId = state.entries[0].id;
@@ -96,6 +111,8 @@ if (!state.selectedId && state.entries.length) {
 bindEvents();
 render();
 initializeServerSync();
+initializeStudyRoute();
+registerServiceWorker();
 
 function bindEvents() {
   form.addEventListener("submit", handleSubmit);
@@ -111,6 +128,21 @@ function bindEvents() {
   saveServerTokenBtn.addEventListener("click", saveServerToken);
   pullServerBtn.addEventListener("click", () => pullServerEntries(true));
   pushLocalBtn.addEventListener("click", pushLocalEntries);
+  openStudyBtn.addEventListener("click", openStudyMode);
+  openStudyHeroBtn.addEventListener("click", openStudyMode);
+  closeStudyBtn.addEventListener("click", closeStudyMode);
+  studyRevealBtn.addEventListener("click", revealStudyCard);
+  studyAgainBtn.addEventListener("click", () => markStudyStatus("review"));
+  studyKnownBtn.addEventListener("click", () => markStudyStatus("mastered"));
+  studyTabs.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.studyMode = button.dataset.studyMode;
+      state.studyIndex = 0;
+      state.studyReveal = false;
+      renderStudy();
+    });
+  });
+  document.addEventListener("keydown", handleStudyKeys);
   searchInput.addEventListener("input", (event) => {
     state.query = event.target.value.trim().toLowerCase();
     renderList();
@@ -211,8 +243,9 @@ function loadEntries() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(demoEntries));
-      return demoEntries;
+      const starterEntries = window.location.protocol === "file:" ? demoEntries : [];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(starterEntries));
+      return starterEntries;
     }
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.map(normalizeEntry) : demoEntries;
@@ -251,6 +284,18 @@ function normalizeEntry(entry) {
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries.map(normalizeEntry)));
+}
+
+function initializeStudyRoute() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("review") === "1" || window.location.hash === "#review") {
+    openStudyMode();
+  }
+}
+
+function registerServiceWorker() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator) || window.location.protocol === "file:") return;
+  navigator.serviceWorker.register("./service-worker.js").catch(() => {});
 }
 
 function isHostedApp() {
@@ -393,6 +438,7 @@ function render() {
   renderStats();
   renderList();
   renderDetail();
+  renderStudy();
 }
 
 function renderStats() {
@@ -583,6 +629,13 @@ function deleteEntry(id) {
 function markStatus(status) {
   const id = state.selectedId;
   if (!id) return;
+  const updatedEntry = updateEntryStatus(id, status);
+  state.reveal = status === "mastered";
+  render();
+  if (updatedEntry) saveEntryRemote(updatedEntry);
+}
+
+function updateEntryStatus(id, status) {
   let updatedEntry = null;
   state.entries = state.entries.map((entry) =>
     entry.id === id
@@ -593,10 +646,175 @@ function markStatus(status) {
         })
       : entry,
   );
-  state.reveal = status === "mastered";
   persist();
+  return updatedEntry;
+}
+
+function openStudyMode() {
+  state.studyOpen = true;
+  state.studyReveal = false;
+  document.body.classList.add("study-active");
+  studyShell.classList.add("active");
+  studyShell.setAttribute("aria-hidden", "false");
+  renderStudy();
+}
+
+function closeStudyMode() {
+  state.studyOpen = false;
+  document.body.classList.remove("study-active");
+  studyShell.classList.remove("active");
+  studyShell.setAttribute("aria-hidden", "true");
+}
+
+function revealStudyCard() {
+  state.studyReveal = true;
+  renderStudy();
+}
+
+function markStudyStatus(status) {
+  const entry = getCurrentStudyEntry();
+  if (!entry) return;
+  const updatedEntry = updateEntryStatus(entry.id, status);
+  const removesCurrentCard = status === "mastered" && state.studyMode === "due";
+  state.studyReveal = false;
+  moveToNextStudyCard(removesCurrentCard);
   render();
   if (updatedEntry) saveEntryRemote(updatedEntry);
+}
+
+function moveToNextStudyCard(removesCurrentCard) {
+  const queue = getStudyQueue();
+  if (!queue.length) {
+    state.studyIndex = 0;
+    return;
+  }
+  const nextIndex = removesCurrentCard ? state.studyIndex : state.studyIndex + 1;
+  state.studyIndex = Math.min(nextIndex, queue.length - 1);
+}
+
+function handleStudyKeys(event) {
+  if (!state.studyOpen) return;
+  const tagName = document.activeElement?.tagName;
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(tagName)) return;
+
+  if (event.key === "Escape") {
+    closeStudyMode();
+    return;
+  }
+
+  if (event.key === " " || event.key === "Enter") {
+    event.preventDefault();
+    if (state.studyReveal) {
+      markStudyStatus("mastered");
+    } else {
+      revealStudyCard();
+    }
+  }
+
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    markStudyStatus("review");
+  }
+
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    markStudyStatus("mastered");
+  }
+}
+
+function getStudyQueue() {
+  const entries = state.entries.filter((entry) => entry.word && (entry.meaning || entry.sentence));
+  const filtered = entries.filter((entry) => {
+    if (state.studyMode === "starred") return entry.starred;
+    if (state.studyMode === "all") return true;
+    return entry.status !== "mastered";
+  });
+
+  return filtered.sort((a, b) => {
+    if (a.status !== b.status) {
+      if (a.status === "review") return -1;
+      if (b.status === "review") return 1;
+      if (a.status === "new") return -1;
+      if (b.status === "new") return 1;
+    }
+    if (a.starred !== b.starred) return a.starred ? -1 : 1;
+    if (a.importance !== b.importance) return b.importance - a.importance;
+    return new Date(a.reviewedAt || a.createdAt) - new Date(b.reviewedAt || b.createdAt);
+  });
+}
+
+function getCurrentStudyEntry() {
+  const queue = getStudyQueue();
+  if (!queue.length) return null;
+  if (state.studyIndex >= queue.length) state.studyIndex = Math.max(0, queue.length - 1);
+  return queue[state.studyIndex] ?? null;
+}
+
+function renderStudy() {
+  studyTabs.forEach((button) => {
+    button.classList.toggle("active", button.dataset.studyMode === state.studyMode);
+  });
+
+  const queue = getStudyQueue();
+  const entry = getCurrentStudyEntry();
+  const total = queue.length;
+  const current = entry ? state.studyIndex + 1 : 0;
+  const progress = total ? (current / total) * 100 : 0;
+
+  studyCounter.textContent = `${current} / ${total}`;
+  studyProgressBar.style.width = `${progress}%`;
+
+  [studyRevealBtn, studyAgainBtn, studyKnownBtn].forEach((button) => {
+    button.disabled = !entry;
+  });
+  studyRevealBtn.disabled = !entry || state.studyReveal;
+
+  if (!entry) {
+    studyCard.className = "study-card empty";
+    studyCard.innerHTML = `
+      <div>
+        <p class="section-kicker">Done</p>
+        <h3>오늘 볼 카드가 없어요</h3>
+        <p class="study-pos">전체 탭을 누르면 완료한 카드까지 다시 볼 수 있습니다.</p>
+      </div>
+    `;
+    return;
+  }
+
+  studyCard.className = "study-card";
+  const meaning = state.studyReveal
+    ? escapeHtml(entry.meaning || "저장된 뜻 없음")
+    : "뜻을 보려면 버튼을 누르세요";
+  const sentence = entry.sentence
+    ? blankSentence(entry.sentence, entry.word, !state.studyReveal)
+    : "저장된 예문 없음";
+  const note = entry.note ? `<div class="study-block"><h4>메모</h4><p>${escapeHtml(entry.note)}</p></div>` : "";
+  const tags = entry.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("");
+
+  studyCard.innerHTML = `
+    <div class="study-word">
+      <div>
+        <h3>${escapeHtml(entry.word)}</h3>
+        <p class="study-pos">${escapeHtml(entry.partOfSpeech || statusLabel(entry.status))}</p>
+      </div>
+      <span class="status-pill ${entry.status === "mastered" ? "mastered" : "review"} study-status">${statusLabel(entry.status)}</span>
+    </div>
+    <div class="study-block">
+      <h4>논문 예문</h4>
+      <blockquote>${sentence}</blockquote>
+    </div>
+    <div class="study-block">
+      <h4>뜻</h4>
+      <p class="study-meaning ${state.studyReveal ? "" : "hidden"}">${meaning}</p>
+    </div>
+    ${
+      entry.paperTitle || entry.page
+        ? `<div class="study-block"><h4>출처</h4><p>${escapeHtml([entry.paperTitle, entry.page].filter(Boolean).join(" · "))}</p></div>`
+        : ""
+    }
+    ${note}
+    ${tags ? `<div class="word-meta">${tags}</div>` : ""}
+  `;
 }
 
 function getSelectedEntry() {

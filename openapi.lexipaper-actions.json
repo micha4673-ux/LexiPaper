@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://YOUR-VERCEL-DOMAIN.vercel.app"
+      "url": "https://lexi-paper-oevt.vercel.app"
     }
   ],
   "paths": {

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LexiPaper">
+  <rect width="512" height="512" rx="96" fill="#146c70"/>
+  <path fill="#fff" d="M146 108h72v236h126v60H146z"/>
+  <path fill="#f1c84b" d="M247 143h120v38H247z"/>
+  <path fill="#d96b58" d="M247 213h92v38h-92z"/>
+  <path fill="#e0f0ef" d="M247 283h132v38H247z"/>
+</svg>

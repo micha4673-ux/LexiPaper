@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "check": "node --check app.js && node --check api/_supabase.js && node --check api/entries.js && node --check api/actions/save-word.js"
+    "check": "node --check app.js && node --check service-worker.js && node --check api/_supabase.js && node --check api/entries.js && node --check api/actions/save-word.js"
   },
   "engines": {
     "node": ">=18"
