@@ -91,6 +91,17 @@ function clampImportance(value) {
 
 function entryToRow(entry) {
   const now = new Date().toISOString();
+  const rawPayload =
+    entry.rawPayload && typeof entry.rawPayload === "object" && !Array.isArray(entry.rawPayload)
+      ? { ...entry.rawPayload }
+      : {};
+  rawPayload.review = {
+    reviewLevel: Number(entry.reviewLevel || 0),
+    dueAt: entry.dueAt || null,
+    lastQuizStep: entry.lastQuizStep || null,
+    reviewCount: Number(entry.reviewCount || 0),
+  };
+
   return {
     id: String(entry.id || randomUUID()),
     word: String(entry.word || "").trim(),
@@ -108,11 +119,12 @@ function entryToRow(entry) {
     created_at: entry.createdAt || entry.created_at || now,
     reviewed_at: entry.reviewedAt || entry.reviewed_at || null,
     updated_at: now,
-    raw_payload: entry.rawPayload || entry.raw_payload || {},
+    raw_payload: rawPayload,
   };
 }
 
 function rowToEntry(row) {
+  const review = row.raw_payload?.review || {};
   return {
     id: row.id,
     word: row.word,
@@ -129,6 +141,10 @@ function rowToEntry(row) {
     starred: Boolean(row.starred),
     createdAt: row.created_at,
     reviewedAt: row.reviewed_at,
+    reviewLevel: review.reviewLevel || 0,
+    dueAt: review.dueAt || null,
+    lastQuizStep: review.lastQuizStep || null,
+    reviewCount: review.reviewCount || 0,
   };
 }
 

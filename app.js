@@ -1,5 +1,13 @@
 const STORAGE_KEY = "lexipaper.entries.v1";
 const API_TOKEN_KEY = "lexipaper.apiToken.v1";
+const QUIZ_STEPS = [
+  { name: "문장 빈칸", hours: 168, levelDelta: 2, label: "매우 쉬움" },
+  { name: "첫 글자", hours: 96, levelDelta: 1, label: "쉬움" },
+  { name: "뜻 회상", hours: 48, levelDelta: 0, label: "보통" },
+  { name: "선택지", hours: 24, levelDelta: -1, label: "어려움" },
+  { name: "품사/용례", hours: 6, levelDelta: -2, label: "매우 어려움" },
+];
+const MISSED_REVIEW_HOURS = 2;
 
 const demoEntries = [
   {
@@ -19,6 +27,10 @@ const demoEntries = [
     starred: true,
     createdAt: new Date().toISOString(),
     reviewedAt: null,
+    reviewLevel: 1,
+    dueAt: null,
+    lastQuizStep: null,
+    reviewCount: 0,
   },
   {
     id: "sample-subsequent",
@@ -37,6 +49,10 @@ const demoEntries = [
     starred: false,
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     reviewedAt: null,
+    reviewLevel: 0,
+    dueAt: null,
+    lastQuizStep: null,
+    reviewCount: 0,
   },
 ];
 
@@ -53,6 +69,7 @@ const state = {
   studyMode: "due",
   studyIndex: 0,
   studyReveal: false,
+  studyStep: 0,
 };
 
 const form = document.querySelector("#entryForm");
@@ -131,14 +148,16 @@ function bindEvents() {
   openStudyBtn.addEventListener("click", openStudyMode);
   openStudyHeroBtn.addEventListener("click", openStudyMode);
   closeStudyBtn.addEventListener("click", closeStudyMode);
-  studyRevealBtn.addEventListener("click", revealStudyCard);
-  studyAgainBtn.addEventListener("click", () => markStudyStatus("review"));
-  studyKnownBtn.addEventListener("click", () => markStudyStatus("mastered"));
+  studyRevealBtn.addEventListener("click", advanceStudyStep);
+  studyAgainBtn.addEventListener("click", handleStudyAnswerButton);
+  studyKnownBtn.addEventListener("click", handleStudyKnownButton);
+  studyCard.addEventListener("click", handleStudyChoice);
   studyTabs.forEach((button) => {
     button.addEventListener("click", () => {
       state.studyMode = button.dataset.studyMode;
       state.studyIndex = 0;
       state.studyReveal = false;
+      state.studyStep = 0;
       renderStudy();
     });
   });
@@ -197,6 +216,10 @@ function handleSubmit(event) {
     starred: existing?.starred ?? false,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     reviewedAt: existing?.reviewedAt ?? null,
+    reviewLevel: existing?.reviewLevel ?? 0,
+    dueAt: existing?.dueAt ?? null,
+    lastQuizStep: existing?.lastQuizStep ?? null,
+    reviewCount: existing?.reviewCount ?? 0,
   };
 
   if (existing) {
@@ -279,6 +302,10 @@ function normalizeEntry(entry) {
     starred: Boolean(entry.starred),
     createdAt: entry.createdAt ?? new Date().toISOString(),
     reviewedAt: entry.reviewedAt ?? null,
+    reviewLevel: clamp(Number(entry.reviewLevel ?? 0), 0, 5),
+    dueAt: entry.dueAt ?? null,
+    lastQuizStep: entry.lastQuizStep ? clamp(Number(entry.lastQuizStep), 1, 5) : null,
+    reviewCount: Math.max(0, Number(entry.reviewCount ?? 0) || 0),
   };
 }
 
@@ -443,7 +470,7 @@ function render() {
 
 function renderStats() {
   const total = state.entries.length;
-  const review = state.entries.filter((entry) => entry.status !== "mastered").length;
+  const review = state.entries.filter(isDueEntry).length;
   const starred = state.entries.filter((entry) => entry.starred).length;
   const papers = new Set(
     state.entries
@@ -636,16 +663,21 @@ function markStatus(status) {
 }
 
 function updateEntryStatus(id, status) {
+  const reviewedAt = new Date().toISOString();
   let updatedEntry = null;
-  state.entries = state.entries.map((entry) =>
-    entry.id === id
-      ? (updatedEntry = {
-          ...entry,
-          status,
-          reviewedAt: new Date().toISOString(),
-        })
-      : entry,
-  );
+  state.entries = state.entries.map((entry) => {
+    if (entry.id !== id) return entry;
+    const reviewLevel = clamp(Number(entry.reviewLevel || 0) + (status === "mastered" ? 1 : -1), 0, 5);
+    updatedEntry = {
+      ...entry,
+      status,
+      reviewedAt,
+      reviewLevel,
+      dueAt: status === "mastered" ? nextDueAt(168 + reviewLevel * 24) : null,
+      reviewCount: Number(entry.reviewCount || 0) + 1,
+    };
+    return updatedEntry;
+  });
   persist();
   return updatedEntry;
 }
@@ -653,6 +685,7 @@ function updateEntryStatus(id, status) {
 function openStudyMode() {
   state.studyOpen = true;
   state.studyReveal = false;
+  state.studyStep = 0;
   document.body.classList.add("study-active");
   studyShell.classList.add("active");
   studyShell.setAttribute("aria-hidden", "false");
@@ -666,30 +699,141 @@ function closeStudyMode() {
   studyShell.setAttribute("aria-hidden", "true");
 }
 
-function revealStudyCard() {
+function revealStudyAnswer() {
   state.studyReveal = true;
   renderStudy();
 }
 
-function markStudyStatus(status) {
+function advanceStudyStep() {
   const entry = getCurrentStudyEntry();
   if (!entry) return;
-  const updatedEntry = updateEntryStatus(entry.id, status);
-  const removesCurrentCard = status === "mastered" && state.studyMode === "due";
+
+  if (state.studyReveal) return;
+
+  if (state.studyStep < QUIZ_STEPS.length - 1) {
+    state.studyStep += 1;
+    renderStudy();
+    return;
+  }
+
+  revealStudyAnswer();
+}
+
+function handleStudyAnswerButton() {
+  const entry = getCurrentStudyEntry();
+  if (!entry) return;
+
+  if (state.studyReveal) {
+    markStudyMissed();
+    return;
+  }
+
+  revealStudyAnswer();
+}
+
+function handleStudyKnownButton() {
+  const entry = getCurrentStudyEntry();
+  if (!entry) return;
+
+  if (state.studyReveal) {
+    markStudyMissed();
+    return;
+  }
+
+  completeStudyCard();
+}
+
+function handleStudyChoice(event) {
+  const choice = event.target.closest("[data-choice]");
+  if (!choice || state.studyReveal || state.studyStep !== 3) return;
+
+  if (choice.dataset.correct === "true") {
+    completeStudyCard();
+    return;
+  }
+
+  state.studyStep = Math.min(QUIZ_STEPS.length - 1, state.studyStep + 1);
+  renderStudy();
+}
+
+function completeStudyCard() {
+  const entry = getCurrentStudyEntry();
+  if (!entry) return;
+  const updatedEntry = applyStudyResult(entry.id, buildReviewResult(entry, state.studyStep));
+  moveAfterStudyResult(updatedEntry);
+}
+
+function markStudyMissed() {
+  const entry = getCurrentStudyEntry();
+  if (!entry) return;
+  const updatedEntry = applyStudyResult(entry.id, buildReviewResult(entry, QUIZ_STEPS.length));
+  moveAfterStudyResult(updatedEntry);
+}
+
+function moveAfterStudyResult(updatedEntry) {
+  const removesCurrentCard = state.studyMode === "due";
   state.studyReveal = false;
+  state.studyStep = 0;
   moveToNextStudyCard(removesCurrentCard);
   render();
   if (updatedEntry) saveEntryRemote(updatedEntry);
+}
+
+function applyStudyResult(id, result) {
+  let updatedEntry = null;
+  state.entries = state.entries.map((entry) =>
+    entry.id === id ? (updatedEntry = { ...entry, ...result }) : entry,
+  );
+  persist();
+  return updatedEntry;
+}
+
+function buildReviewResult(entry, stepIndex) {
+  const reviewedAt = new Date().toISOString();
+  const currentLevel = clamp(Number(entry.reviewLevel || 0), 0, 5);
+  const reviewCount = Number(entry.reviewCount || 0) + 1;
+
+  if (stepIndex >= QUIZ_STEPS.length) {
+    return {
+      status: "review",
+      reviewedAt,
+      reviewLevel: clamp(currentLevel - 2, 0, 5),
+      dueAt: nextDueAt(MISSED_REVIEW_HOURS),
+      lastQuizStep: QUIZ_STEPS.length,
+      reviewCount,
+    };
+  }
+
+  const step = QUIZ_STEPS[stepIndex];
+  const nextLevel = clamp(currentLevel + step.levelDelta, 0, 5);
+  const intervalHours = Math.max(2, Math.round(step.hours * (1 + nextLevel * 0.18)));
+
+  return {
+    status: "mastered",
+    reviewedAt,
+    reviewLevel: nextLevel,
+    dueAt: nextDueAt(intervalHours),
+    lastQuizStep: stepIndex + 1,
+    reviewCount,
+  };
 }
 
 function moveToNextStudyCard(removesCurrentCard) {
   const queue = getStudyQueue();
   if (!queue.length) {
     state.studyIndex = 0;
+    state.studyStep = 0;
+    state.studyReveal = false;
     return;
   }
   const nextIndex = removesCurrentCard ? state.studyIndex : state.studyIndex + 1;
-  state.studyIndex = Math.min(nextIndex, queue.length - 1);
+  state.studyIndex = removesCurrentCard
+    ? Math.min(nextIndex, queue.length - 1)
+    : nextIndex >= queue.length
+      ? 0
+      : nextIndex;
+  state.studyStep = 0;
+  state.studyReveal = false;
 }
 
 function handleStudyKeys(event) {
@@ -702,23 +846,24 @@ function handleStudyKeys(event) {
     return;
   }
 
-  if (event.key === " " || event.key === "Enter") {
+  if (event.key === " ") {
     event.preventDefault();
-    if (state.studyReveal) {
-      markStudyStatus("mastered");
-    } else {
-      revealStudyCard();
-    }
+    advanceStudyStep();
+  }
+
+  if (event.key === "Enter") {
+    event.preventDefault();
+    handleStudyKnownButton();
   }
 
   if (event.key === "ArrowLeft") {
     event.preventDefault();
-    markStudyStatus("review");
+    handleStudyAnswerButton();
   }
 
   if (event.key === "ArrowRight") {
     event.preventDefault();
-    markStudyStatus("mastered");
+    handleStudyKnownButton();
   }
 }
 
@@ -727,10 +872,16 @@ function getStudyQueue() {
   const filtered = entries.filter((entry) => {
     if (state.studyMode === "starred") return entry.starred;
     if (state.studyMode === "all") return true;
-    return entry.status !== "mastered";
+    return isDueEntry(entry);
   });
 
   return filtered.sort((a, b) => {
+    const aDue = isDueEntry(a);
+    const bDue = isDueEntry(b);
+    if (aDue !== bDue) return aDue ? -1 : 1;
+    const aDueTime = reviewDueTime(a);
+    const bDueTime = reviewDueTime(b);
+    if (aDueTime !== bDueTime) return aDueTime - bDueTime;
     if (a.status !== b.status) {
       if (a.status === "review") return -1;
       if (b.status === "review") return 1;
@@ -768,6 +919,8 @@ function renderStudy() {
     button.disabled = !entry;
   });
   studyRevealBtn.disabled = !entry || state.studyReveal;
+  studyAgainBtn.disabled = !entry;
+  studyKnownBtn.disabled = !entry;
 
   if (!entry) {
     studyCard.className = "study-card empty";
@@ -782,39 +935,211 @@ function renderStudy() {
   }
 
   studyCard.className = "study-card";
-  const meaning = state.studyReveal
-    ? escapeHtml(entry.meaning || "저장된 뜻 없음")
-    : "뜻을 보려면 버튼을 누르세요";
-  const sentence = entry.sentence
-    ? blankSentence(entry.sentence, entry.word, !state.studyReveal)
-    : "저장된 예문 없음";
-  const note = entry.note ? `<div class="study-block"><h4>메모</h4><p>${escapeHtml(entry.note)}</p></div>` : "";
+  const step = QUIZ_STEPS[state.studyStep] ?? QUIZ_STEPS[QUIZ_STEPS.length - 1];
   const tags = entry.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("");
+  const heading = state.studyReveal ? entry.word : `${step.name} 퀴즈`;
+  const subheading = state.studyReveal
+    ? entry.partOfSpeech || difficultyLabel(entry)
+    : `${step.label} · ${reviewPreviewText(state.studyStep)}`;
+
+  setButtonLabel(studyRevealBtn, state.studyStep < QUIZ_STEPS.length - 1 ? "모르면 다음 힌트" : "모르면 정답");
+  setButtonLabel(studyAgainBtn, state.studyReveal ? "오늘 다시" : "정답 보기");
+  setButtonLabel(studyKnownBtn, state.studyReveal ? "다음 카드" : "맞혔어요");
 
   studyCard.innerHTML = `
+    <div class="quiz-stepper" aria-label="힌트 단계">
+      ${QUIZ_STEPS.map(
+        (item, index) =>
+          `<span class="quiz-step${index === state.studyStep ? " active" : ""}${index < state.studyStep ? " done" : ""}" title="${escapeHtml(item.name)}">${index + 1}</span>`,
+      ).join("")}
+    </div>
     <div class="study-word">
       <div>
-        <h3>${escapeHtml(entry.word)}</h3>
-        <p class="study-pos">${escapeHtml(entry.partOfSpeech || statusLabel(entry.status))}</p>
+        <h3>${escapeHtml(heading)}</h3>
+        <p class="study-pos">${escapeHtml(subheading)}</p>
       </div>
-      <span class="status-pill ${entry.status === "mastered" ? "mastered" : "review"} study-status">${statusLabel(entry.status)}</span>
+      <span class="status-pill ${isDueEntry(entry) ? "review" : "mastered"} study-status">${reviewTimingLabel(entry)}</span>
     </div>
+    ${state.studyReveal ? studyAnswerMarkup(entry) : studyPromptMarkup(entry)}
+    ${tags ? `<div class="word-meta">${tags}</div>` : ""}
+  `;
+}
+
+function studyPromptMarkup(entry) {
+  const sentence = entry.sentence
+    ? blankSentence(entry.sentence, entry.word, true)
+    : `<span class="muted-text">저장된 예문 없음</span>`;
+
+  if (state.studyStep === 1) {
+    return `
+      <div class="study-block">
+        <h4>논문 예문</h4>
+        <blockquote>${sentence}</blockquote>
+      </div>
+      <div class="study-block">
+        <h4>첫 글자</h4>
+        <p class="letter-hint">${escapeHtml(firstLetterHint(entry.word))}</p>
+      </div>
+    `;
+  }
+
+  if (state.studyStep === 2) {
+    return `
+      <div class="study-block">
+        <h4>한국어 뜻</h4>
+        <p class="study-meaning">${escapeHtml(entry.meaning || "저장된 뜻 없음")}</p>
+      </div>
+      <div class="study-block">
+        <h4>논문 예문</h4>
+        <blockquote>${sentence}</blockquote>
+      </div>
+    `;
+  }
+
+  if (state.studyStep === 3) {
+    return `
+      <div class="study-block">
+        <h4>논문 예문</h4>
+        <blockquote>${sentence}</blockquote>
+      </div>
+      <div class="study-block">
+        <h4>보기</h4>
+        <div class="choice-grid">
+          ${choiceOptions(entry)
+            .map(
+              (option) =>
+                `<button class="choice-button" type="button" data-choice="${escapeHtml(option)}" data-correct="${String(option.toLowerCase() === entry.word.toLowerCase())}">${escapeHtml(option)}</button>`,
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.studyStep === 4) {
+    return `
+      <div class="study-block">
+        <h4>논문 예문</h4>
+        <blockquote>${sentence}</blockquote>
+      </div>
+      <div class="hint-grid">
+        <div class="hint-box">
+          <h4>품사</h4>
+          <p>${escapeHtml(entry.partOfSpeech || "품사 없음")}</p>
+        </div>
+        <div class="hint-box">
+          <h4>용례</h4>
+          <p>${escapeHtml(entry.note || entry.meaning || "저장된 용례 없음")}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
     <div class="study-block">
       <h4>논문 예문</h4>
       <blockquote>${sentence}</blockquote>
     </div>
+  `;
+}
+
+function studyAnswerMarkup(entry) {
+  const source = [entry.paperTitle, entry.page].filter(Boolean).join(" · ");
+  const note = entry.note ? `<div class="study-block"><h4>메모</h4><p>${escapeHtml(entry.note)}</p></div>` : "";
+
+  return `
+    <div class="answer-banner">
+      <span>정답</span>
+      <strong>${escapeHtml(entry.word)}</strong>
+    </div>
     <div class="study-block">
       <h4>뜻</h4>
-      <p class="study-meaning ${state.studyReveal ? "" : "hidden"}">${meaning}</p>
+      <p class="study-meaning">${escapeHtml(entry.meaning || "저장된 뜻 없음")}</p>
+    </div>
+    <div class="study-block">
+      <h4>논문 예문</h4>
+      <blockquote>${entry.sentence ? blankSentence(entry.sentence, entry.word, false) : "저장된 예문 없음"}</blockquote>
     </div>
     ${
-      entry.paperTitle || entry.page
-        ? `<div class="study-block"><h4>출처</h4><p>${escapeHtml([entry.paperTitle, entry.page].filter(Boolean).join(" · "))}</p></div>`
+      source
+        ? `<div class="study-block"><h4>출처</h4><p>${escapeHtml(source)}</p></div>`
         : ""
     }
     ${note}
-    ${tags ? `<div class="word-meta">${tags}</div>` : ""}
   `;
+}
+
+function choiceOptions(entry) {
+  const words = state.entries
+    .map((item) => item.word)
+    .filter((word) => word && word.toLowerCase() !== entry.word.toLowerCase());
+  const fallback = ["analysis", "evidence", "method", "significant", "subsequent", "robust"];
+  const candidates = uniqueWords([...words, ...fallback]).filter(
+    (word) => word.toLowerCase() !== entry.word.toLowerCase(),
+  );
+  return shuffleWords([entry.word, ...shuffleWords(candidates).slice(0, 3)]);
+}
+
+function uniqueWords(words) {
+  const seen = new Set();
+  return words.filter((word) => {
+    const key = word.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function shuffleWords(words) {
+  return [...words].sort(() => Math.random() - 0.5);
+}
+
+function firstLetterHint(word) {
+  const trimmed = String(word || "").trim();
+  if (!trimmed) return "";
+  return `${trimmed[0]}${"·".repeat(Math.max(2, trimmed.length - 1))}`;
+}
+
+function setButtonLabel(button, label) {
+  const icon = button.querySelector("svg")?.outerHTML ?? "";
+  button.innerHTML = `${icon}${escapeHtml(label)}`;
+}
+
+function nextDueAt(hours) {
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+}
+
+function reviewDueTime(entry) {
+  if (!entry.dueAt) return entry.status === "mastered" ? Number.MAX_SAFE_INTEGER : 0;
+  const time = new Date(entry.dueAt).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function isDueEntry(entry) {
+  if (!entry?.word) return false;
+  const dueTime = reviewDueTime(entry);
+  if (dueTime === Number.MAX_SAFE_INTEGER) return false;
+  return dueTime <= Date.now();
+}
+
+function reviewTimingLabel(entry) {
+  if (isDueEntry(entry)) return "지금 복습";
+  if (!entry.dueAt) return statusLabel(entry.status);
+  const diffHours = Math.ceil((reviewDueTime(entry) - Date.now()) / 3600000);
+  if (diffHours <= 1) return "1시간 뒤";
+  if (diffHours < 24) return `${diffHours}시간 뒤`;
+  return `${Math.ceil(diffHours / 24)}일 뒤`;
+}
+
+function reviewPreviewText(stepIndex) {
+  const step = QUIZ_STEPS[stepIndex] ?? QUIZ_STEPS[QUIZ_STEPS.length - 1];
+  if (step.hours < 24) return `${step.hours}시간 뒤 복습`;
+  return `${Math.round(step.hours / 24)}일 뒤 복습`;
+}
+
+function difficultyLabel(entry) {
+  const step = entry.lastQuizStep ? QUIZ_STEPS[entry.lastQuizStep - 1] : null;
+  return step ? step.label : statusLabel(entry.status);
 }
 
 function getSelectedEntry() {
@@ -825,7 +1150,7 @@ function getVisibleEntries() {
   const query = state.query;
   return state.entries
     .filter((entry) => {
-      if (state.filter === "review" && entry.status === "mastered") return false;
+      if (state.filter === "review" && !isDueEntry(entry)) return false;
       if (state.filter === "starred" && !entry.starred) return false;
       if (state.filter === "mastered" && entry.status !== "mastered") return false;
       if (!query) return true;
@@ -1156,7 +1481,7 @@ function blankSentence(sentence, word, shouldBlank) {
   sentence.replace(regex, (match, index) => {
     found = true;
     output += escapeHtml(sentence.slice(cursor, index));
-    output += `<span class="blank">${escapeHtml(match)}</span>`;
+    output += `<span class="blank" aria-label="빈칸">${blankMask(match)}</span>`;
     cursor = index + match.length;
     return match;
   });
@@ -1164,6 +1489,10 @@ function blankSentence(sentence, word, shouldBlank) {
   if (!found) return escapeHtml(sentence);
   output += escapeHtml(sentence.slice(cursor));
   return output;
+}
+
+function blankMask(match) {
+  return "&nbsp;".repeat(Math.max(4, String(match).length));
 }
 
 function sourceMarkup(entry) {

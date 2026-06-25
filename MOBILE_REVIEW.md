@@ -6,9 +6,21 @@
 2. Connect the server token once.
 3. Tap `복습 시작`.
 4. Use:
-   - `뜻 보기` to reveal the meaning.
-   - `다시` to keep the card in review.
-   - `알겠어요` to mark it complete.
+   - `모르면 다음 힌트` to move down through the quiz steps.
+   - `정답 보기` to reveal the answer.
+   - `맞혔어요` when you can recall the word.
+
+## Quiz flow
+
+LexiPaper now reviews each word in this order:
+
+1. Sentence blank quiz
+2. First-letter hint
+3. Korean meaning to English word
+4. Paper-context multiple choice
+5. Part-of-speech and usage hint
+
+The app assigns difficulty automatically from the step where you answer. Earlier answers get a longer review interval, and later answers come back sooner. Revealed or missed cards return quickly.
 
 ## Add to home screen
 

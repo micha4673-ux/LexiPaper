@@ -842,6 +842,36 @@ input[type="range"] {
   padding: 20px;
 }
 
+.quiz-stepper {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.quiz-step {
+  display: grid;
+  min-height: 30px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f5f7f6;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.quiz-step.done {
+  border-color: rgba(20, 108, 112, 0.18);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.quiz-step.active {
+  border-color: rgba(217, 107, 88, 0.38);
+  background: var(--coral-soft);
+  color: #8d331f;
+}
+
 .study-card.empty {
   place-items: center;
   text-align: center;
@@ -897,6 +927,99 @@ input[type="range"] {
 .study-block blockquote {
   border-left: 5px solid var(--yellow);
   padding-left: 13px;
+}
+
+.letter-hint {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid rgba(20, 108, 112, 0.22);
+  border-radius: 8px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  padding: 12px 14px;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.choice-button {
+  min-height: 48px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+  color: var(--ink);
+  font-weight: 850;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.choice-button:hover,
+.choice-button:focus-visible {
+  border-color: rgba(20, 108, 112, 0.38);
+  background: var(--teal-soft);
+}
+
+.hint-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: 10px;
+}
+
+.hint-box,
+.answer-banner {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 14px;
+}
+
+.hint-box h4 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.hint-box p {
+  margin: 0;
+  color: #34424b;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.answer-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  border-color: rgba(20, 108, 112, 0.22);
+  background: var(--teal-soft);
+}
+
+.answer-banner span {
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.answer-banner strong {
+  color: var(--graphite);
+  font-size: 28px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .study-meaning {
@@ -1056,6 +1179,16 @@ input[type="range"] {
 
   .study-card h3 {
     font-size: 36px;
+  }
+
+  .choice-grid,
+  .hint-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .letter-hint,
+  .answer-banner strong {
+    font-size: 25px;
   }
 
   .card-word {
